@@ -38,11 +38,11 @@ textarea{min-height:130px;resize:vertical} input[type="text"]:focus, textarea:fo
 <div class="section active" id="start"><div class="card"><label>Your Full Name</label><input type="text" id="studentName" placeholder="Enter your name..."><label style="margin-top:12px">Your Teacher</label><input type="hidden" id="teacherName" value="">
 <label>Your Class</label>
 <select id="className" style="width:100%;padding:14px;border:2px solid #e0e0e0;border-radius:12px;font-size:16px;margin-bottom:15px" onchange="setTeacher(this)">
-  <option value="">-- Select your class --</option>
-  <optgroup label="Eunice Salazar">
-    <option value="3086" data-teacher="Eunice Salazar">3086 -- Mon/Wed 9:00 AM (Eunice)</option>
-    <option value="3099" data-teacher="Eunice Salazar">3099 -- Tue/Thu 8:30 PM (Eunice)</option>
-  </optgroup>
+<option value="">-- Select your class --</option>
+<optgroup label="Eunice Salazar">
+<option value="3086" data-teacher="Eunice Salazar">3086 - Mon/Wed 9:00 AM (Eunice)</option>
+<option value="3099" data-teacher="Eunice Salazar">3099 - Tue/Thu 8:30 PM (Eunice)</option>
+</optgroup>
 </select><button class="btn" onclick="startQuiz()">Start Homework →</button></div></div>
 <div class="section" id="s1"><div class="card"><div class="progress"><div class="progress-bar" style="width:20%"></div></div><h2>1. Reading</h2><div class="reading-box"><p><strong>At the Clinic</strong></p><p>Mr. Lopez goes to the clinic because he does not feel well. He has a headache, a sore throat, and a cough.</p><p>The doctor says, “You should rest, drink warm liquids, and take medicine.”</p><p>Mr. Lopez asks, “Should I stay home from work?” The doctor says yes.</p></div><div id="readingQuestions"></div><button class="btn" onclick="checkS1()">Continue →</button></div></div>
 <div class="section" id="s2"><div class="card"><div class="progress"><div class="progress-bar" style="width:40%"></div></div><h2>2. Vocabulary</h2><p class="small">Match the health word to its meaning.</p><div class="word-bank" id="wordBank"></div><div id="vocabDrops"></div><button class="btn" onclick="checkS2()">Continue →</button></div></div>
