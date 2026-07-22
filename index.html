@@ -149,11 +149,77 @@ function directSubmit(){
   formData.append('entry.1451249480',teacherVal);
   var done=false;
   var timeoutId=setTimeout(function(){if(!done){done=true;showSuccess();}},6000);
+  // -- SQA portal (Supabase) parallel save -- additive; does NOT touch the form post --
+  function savePortalCopy(){
+    function note(m){ var el=document.getElementById('portalStatus');
+      if(!el){ el=document.createElement('div'); el.id='portalStatus';
+        el.style.cssText='margin-top:12px;padding:12px;border-radius:12px;text-align:center;font-size:14px;line-height:1.4;background:#f8f6ff;color:#333';
+        var h=document.getElementById('submitStatus');
+        if(h&&h.parentNode){ h.parentNode.insertBefore(el,h.nextSibling); }
+        else { (document.querySelector('.score-card')||document.querySelector('.card')||document.body).appendChild(el); } }
+      el.textContent=m; el.style.display='block'; }
+    if(typeof window.submitToSupabase!=='function') return;
+    var __ps; try{ __ps=((typeof scores!=='undefined'&&scores)?{reading:scores.l,vocabulary:scores.v,writing:scores.w,speaking:scores.s,grammar:scores.g}:{}); }catch(e){ __ps={}; }
+    var __w=''; try{ __w=(function(){var w='';try{if(typeof writingText!=='undefined'&&writingText)w=writingText;}catch(e){}if(!w){var n=document.getElementById('writing')||document.getElementById('writingResponse')||document.getElementById('writingAnswer');if(n&&n.value)w=n.value;}return (typeof w==='string')?w:'';})(); }catch(e){}
+    var __sp=''; try{ __sp=(function(){var t='';try{if(typeof speakingTranscript!=='undefined'&&speakingTranscript)t=speakingTranscript;}catch(e){}try{if(!t&&typeof spokenText!=='undefined'&&spokenText)t=spokenText;}catch(e){}try{if(!t&&typeof speechTranscript!=='undefined'&&speechTranscript)t=speechTranscript;}catch(e){}try{if(!t&&typeof transcript!=='undefined'&&transcript&&transcript.join)t=transcript.join('\n');}catch(e){}if(!t){var b=document.getElementById('transcriptBox')||document.getElementById('transcript');if(b&&b.textContent&&b.textContent.indexOf('appear here')<0&&b.textContent.indexOf('Listening')<0)t=b.textContent;}return (typeof t==='string')?t.trim():'';})(); }catch(e){}
+    window.submitToSupabase({writingText:__w||'',speakingTranscript:__sp||'',scores:__ps})
+    .then(function(res){ if(!res)return; switch(res.status){
+      case 'ok': note('✓ Also saved to your SQA portal record.'); break;
+      case 'expired': note('Submitted to your teacher. Your portal sign-in expired — reopen this from the portal to also save it there.'); break;
+      case 'no_student': note('Submitted to your teacher. We couldn’t find your portal student record, so it wasn’t saved to the portal.'); break;
+      default: break;   /* no_context (opened outside the portal) / no_activity / transient error -> stay silent; the form already submitted */
+    }}).catch(function(){});
+  }
+  savePortalCopy();
   fetch('https://docs.google.com/forms/d/e/1FAIpQLScxGsRNBL0knEUNZNnTX3FLDx22Lxgc-J7uM4yvi-yuK-hHAQ/formResponse',{method:'POST',mode:'no-cors',body:formData})
     .then(function(){if(done)return;done=true;clearTimeout(timeoutId);showSuccess();})
     .catch(function(){if(done)return;done=true;clearTimeout(timeoutId);showFailure();});
 }
 function submitToTeacher(){directSubmit();}
+</script>
+
+<!-- SQA portal (Supabase) parallel submission. Additive; runs alongside the
+     Google Form post, never replaces it. Identity comes from the portal via a
+     short-lived #sqa= token in the link (cross-origin), or a same-origin session. -->
+<script type="module">
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+const SUPABASE_URL = "https://ponilnhyehnzycspksah.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_YWM3O7i8aHWBGOZM-vAnEw_bR4XStKm";
+const ACTIVITY_REPO = "A2HWClass9";
+const ACTIVITY_SEQ  = 9;
+const ACTIVITY_LEVEL = "A2";
+// Identity pass from the portal (#sqa=<access_token>). Read it, then wipe it from
+// the address bar so it never lingers in history or leaks via referrer.
+let __tok = null;
+try {
+  const h = new URLSearchParams((location.hash || "").replace(/^#/, ""));
+  __tok = h.get("sqa");
+  if (__tok) { h.delete("sqa"); const rest = h.toString();
+    history.replaceState(null, "", location.pathname + location.search + (rest ? "#" + rest : "")); }
+} catch (e) {}
+const sb = __tok
+  ? createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: "Bearer " + __tok } } })
+  : createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+window.submitToSupabase = async function({ writingText, speakingTranscript, scores }){
+  try {
+    let email = null;
+    if (__tok) { const { data } = await sb.auth.getUser(__tok); email = data && data.user ? (data.user.email || "").toLowerCase() : null; }
+    else { const { data: { session } } = await sb.auth.getSession(); email = session ? (session.user.email || "").toLowerCase() : null; }
+    if (!email) return { status: __tok ? "expired" : "no_context" };
+    const { data: student, error: stuErr } = await sb.from("students").select("id").eq("email", email).maybeSingle();
+    if (stuErr) return { status: "error", message: stuErr.message };
+    if (!student) return { status: "no_student", email };
+    let activity = (await sb.from("activities").select("id").eq("repo", ACTIVITY_REPO).maybeSingle()).data;
+    if (!activity) { activity = (await sb.from("activities").select("id").eq("level", ACTIVITY_LEVEL).eq("kind", "homework").eq("sequence_no", ACTIVITY_SEQ).maybeSingle()).data; }
+    if (!activity) return { status: "no_activity" };
+    const auto_scores = (scores && typeof scores === "object") ? { ...scores } : {};
+    if (auto_scores.total === undefined) { const nums = Object.values(auto_scores).filter(v => typeof v === "number"); if (nums.length) auto_scores.total = nums.reduce((a, b) => a + b, 0); }
+    const row = { student_id: student.id, activity_id: activity.id, writing_text: writingText || null, speaking_text: speakingTranscript || null, auto_scores, status: "submitted", submitted_at: new Date().toISOString() };
+    const { error: insErr } = await sb.from("submissions").upsert(row, { onConflict: "student_id,activity_id" });
+    if (insErr) return { status: "error", message: insErr.message };
+    return { status: "ok" };
+  } catch (e) { return { status: "error", message: (e && e.message) || String(e) }; }
+};
 </script>
 </body>
 </html>
